@@ -1,0 +1,46 @@
+/**
+ * Extension for the ZohoInvoiceExport page (Invoice list view button "Download ZOHO Format").
+ * Builds the Zoho CSV for the invoices selected in the list view.
+ */
+public with sharing class ZohoInvoiceExportController {
+
+    private final ApexPages.StandardSetController invoiceRecords;
+    private String csvDataCache;
+    private String errorMessage;
+
+    public ZohoInvoiceExportController(ApexPages.StandardSetController invoiceRecords) {
+        this.invoiceRecords = invoiceRecords;
+    }
+
+    public String getCsvData() {
+        if (csvDataCache == null) {
+            csvDataCache = '';
+            List<Id> invoiceIds = new List<Id>();
+            for (SObject record : invoiceRecords.getSelected()) {
+                invoiceIds.add(record.Id);
+            }
+            if (invoiceIds.isEmpty()) {
+                errorMessage = 'Select at least one invoice in the list view, then click Download ZOHO Format.';
+                return csvDataCache;
+            }
+            try {
+                csvDataCache = new ZohoInvoiceExportService().buildCsv(invoiceIds);
+            } catch (ZohoInvoiceExportException e) {
+                errorMessage = e.getMessage();
+            } catch (Exception e) {
+                System.debug(LoggingLevel.ERROR, 'Zoho export error: ' + e.getMessage() + '\n' + e.getStackTraceString());
+                errorMessage = 'Unexpected error while generating the Zoho file: ' + e.getMessage();
+            }
+        }
+        return csvDataCache;
+    }
+
+    public String getErrorMessage() {
+        getCsvData();
+        return errorMessage;
+    }
+
+    public Boolean getHasError() {
+        return String.isNotBlank(getErrorMessage());
+    }
+}
