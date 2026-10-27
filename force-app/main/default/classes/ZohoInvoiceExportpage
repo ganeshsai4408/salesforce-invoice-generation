@@ -1,0 +1,35 @@
+<apex:page standardController="Invoice_New__c"
+           recordSetVar="invoices"
+           extensions="ZohoInvoiceExportController"
+           showHeader="false"
+           sidebar="false">
+
+<apex:outputPanel rendered="{!hasError}">
+    <div style="padding: 16px; font-family: sans-serif;">
+        <p style="color: #ba0517; white-space: pre-line;"><apex:outputText value="{!errorMessage}"/></p>
+        <button type="button" onclick="window.history.back();">Back</button>
+    </div>
+</apex:outputPanel>
+
+<apex:outputPanel rendered="{!NOT(hasError)}">
+<script>
+    function downloadAndReturn() {
+
+        const csv = '{!JSENCODE(csvData)}';
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+
+        link.href = URL.createObjectURL(blob);
+        link.download = '{!JSENCODE($Label.Zoho_Invoice_Export_File_Name)}';
+        link.click();
+        setTimeout(() => {
+            window.history.back();
+        }, 100);
+    }
+
+    window.onload = downloadAndReturn;
+</script>
+</apex:outputPanel>
+
+</apex:page>
