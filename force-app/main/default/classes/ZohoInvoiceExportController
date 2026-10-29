@@ -4,6 +4,11 @@
  */
 public with sharing class ZohoInvoiceExportController {
 
+    static {
+        ApexPages.currentPage().getHeaders().put('Cache-Control', 'no-cache, no-store, must-revalidate');
+        ApexPages.currentPage().getHeaders().put('Pragma', 'no-cache');
+        ApexPages.currentPage().getHeaders().put('Expires', '0');
+    }
     private final ApexPages.StandardSetController invoiceRecords;
     private String csvDataCache;
     private String errorMessage;
@@ -43,4 +48,74 @@ public with sharing class ZohoInvoiceExportController {
     public Boolean getHasError() {
         return String.isNotBlank(getErrorMessage());
     }
+    
+    /// Returns a warning message if there are empty cells in the CSV data, otherwise returns an empty string.
+    public String getCsvWarning() {
+            String csv = getCsvData();
+            if (String.isBlank(csv)) {
+                return '';
+            }
+            // Normalize line endings to handle different platforms (Windows, Unix, Mac)
+            String normalized = csv.replace('\r\n', '\n').replace('\r', '\n');
+            // Split the CSV into rows and check for empty cells
+            List<String> rows = normalized.split('\n');
+            if (rows.isEmpty()) {
+                return '';
+            }
+            // Parse the header row to get column names
+            List<String> headers = parseCsvRow(rows[0]);
+            Set<String> emptyColumns = new Set<String>();
+            // Start from the second row (index 1) to check for empty cells
+            for (Integer i = 1; i < rows.size(); i++) {
+                if (String.isBlank(rows[i])) {
+                    continue;
+                }
+                // Parse the current row into cells and check for empty values
+                List<String> cells = parseCsvRow(rows[i]);
+                for (Integer j = 0; j < headers.size(); j++) {
+                    String cellValue = (j < cells.size()) ? cells[j].trim() : '';
+                    if (String.isBlank(cellValue)) {
+                        String columnName = String.isBlank(headers[j]) ? 'Column ' + (j + 1) : headers[j];
+                        emptyColumns.add(columnName);
+                    }
+                }
+            }
+
+            if (emptyColumns.isEmpty()) {
+                return '';
+            }
+            // Sort the empty column names for consistent output
+            List<String> warningColumns = new List<String>(emptyColumns);
+            warningColumns.sort();
+
+            return 'There are a few empty cells/columns in the CSV: ' + String.join(warningColumns, ', ');
+        }
+        /// Parses a CSV row into a list of cell values, handling quoted cells and commas.
+        private static List<String> parseCsvRow(String row) {
+            List<String> cells = new List<String>();
+            String current = '';
+            Boolean inQuotes = false;
+
+            for (Integer i = 0; i < row.length(); i++) {
+                String ch = row.substring(i, i + 1);
+
+                if (ch == '"') {
+                    if (inQuotes && i + 1 < row.length() && row.substring(i + 1, i + 2) == '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (ch == ',' && !inQuotes) {
+                    cells.add(current);
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+
+            cells.add(current);
+            return cells;
+        }
+       
 }
