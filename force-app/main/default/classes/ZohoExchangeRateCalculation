@@ -1,0 +1,59 @@
+/**
+ * Exchange rate from a currency on the invoice to a target currency, using the
+ * ExchangeRateAPI Named Credential (same callout as the Download Zoho File button).
+ * Calculation Inputs: <currency field>, <target currency code>
+ *   e.g. Account__r.CurrencyIsoCode, INR
+ * Which invoices get a rate is set with the column's Condition fields.
+ */
+public with sharing class ZohoExchangeRateCalculation implements ZohoColumnCalculation {
+
+    // Cache per currency pair so each pair is fetched only once per export
+    private static Map<String, Decimal> currencyToRateMap = new Map<String, Decimal>();
+
+    public Set<String> getInvoiceFields(List<String> inputs) {
+        if (inputs.size() != 2 || inputs[1].length() != 3) {
+            throw new ZohoInvoiceExportException('expects two inputs: currency field, target currency code (e.g. Account__r.CurrencyIsoCode, INR).');
+        }
+        return new Set<String>{ inputs[0] };
+    }
+
+    public String calculate(SObject invoice, List<String> inputs, Zoho_Invoice_Column__mdt column) {
+        Object baseCurrency = ZohoInvoiceExportService.readPath(invoice, inputs[0]);
+        if (baseCurrency == null || String.isBlank(String.valueOf(baseCurrency))) {
+            return '';
+        }
+        String pair = String.valueOf(baseCurrency) + '/' + inputs[1].toUpperCase();
+        if (!currencyToRateMap.containsKey(pair)) {
+            currencyToRateMap.put(pair, getExchangeRate(pair));
+        }
+        Decimal rate = currencyToRateMap.get(pair);
+        return rate == null ? '' : String.valueOf(rate);
+    }
+
+    //Fetch exchange rate from external API
+    @TestVisible
+    private static Decimal getExchangeRate(String pair) {
+        try {
+            HttpRequest req = new HttpRequest();
+            req.setEndpoint('callout:ExchangeRateAPI/pair/' + pair);
+            req.setMethod('GET');
+            req.setTimeout(5000);
+
+            Http http = new Http();
+            HttpResponse res = http.send(req);
+
+            if(res.getStatusCode() == 200) {
+                Map<String, Object> responseMap = (Map<String, Object>) JSON.deserializeUntyped(res.getBody());
+
+                if(responseMap.containsKey('conversion_rate')) {
+                    return Decimal.valueOf(String.valueOf(responseMap.get('conversion_rate'))).setScale(2);
+                }
+            }
+
+        } catch(Exception e) {
+            System.debug('Exchange Rate API Error: ' + e.getMessage());
+        }
+
+        return null;
+    }
+}
